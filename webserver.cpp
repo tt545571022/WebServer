@@ -173,6 +173,9 @@ void WebServer::eventListen()
 }
 
 //创建一个定时器节点，将连接信息挂载
+//timer在什么时候调用？答案是在accept得到cfd的时候。这时候通过timer函数不只是初始化了cfd的时间，而且整体初始化。
+// 也就是说，当前服务器已经认可了这一连接，完成了三次握手，并且得到了用户标识，允许传输数据。
+// 这里为了提升性能，给到了3倍阈值的超时。
 void WebServer::timer(int connfd, struct sockaddr_in client_address)
 {
     users[connfd].init(connfd, client_address, m_root, m_CONNTrigmode, m_close_log, m_user, m_passWord, m_databaseName);
@@ -263,6 +266,7 @@ bool WebServer::dealclinetdata()
 }
 
 //处理定时器信号,set the timeout ture
+//与读写不同的是，这里的signal是处理函数，它不需要上队列。这里是通过管道的方式来告知WebServer。管道由epoll监控
 bool WebServer::dealwithsignal(bool &timeout, bool &stop_server)
 {
     int ret = 0;
@@ -314,6 +318,7 @@ void WebServer::dealwithread(int sockfd)
     util_timer *timer = users_timer[sockfd].timer;
 
     //reactor
+    //reactor的主线程中并没有进行读操作，只是将读事件放入请求队列中。
     if (1 == m_actormodel)
     {
         if (timer)
@@ -341,6 +346,7 @@ void WebServer::dealwithread(int sockfd)
         }
     }
     //proactor
+    //proactor的读写操作在主线程中完成，因此，这儿将会进行真正的读操作。
     else
     {   
         //先读取数据，再放进请求队列
@@ -391,7 +397,7 @@ void WebServer::dealwithwrite(int sockfd)
     }
     else
     {
-        //proactor
+        //proactor,这儿在进行真正的写操作
         if (users[sockfd].write())
         {
             LOG_INFO("send data to the client(%s)", inet_ntoa(users[sockfd].get_address()->sin_addr));

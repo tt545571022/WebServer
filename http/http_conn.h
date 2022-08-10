@@ -98,8 +98,8 @@ public:
 	//初始化数据库读取线程
     void initmysql_result(connection_pool *connPool);
 	
-    int timer_flag;//是否关闭连接
-    int improv;//是否正在处理数据中
+    int timer_flag;     //是否关闭连接
+    int improv;         //是否正在处理数据中
 
 
 private:
