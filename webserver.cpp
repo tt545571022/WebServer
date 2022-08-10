@@ -439,14 +439,17 @@ void WebServer::eventLoop()
                 if (false == flag)
                     continue;
             }
-            //处理异常事件
+            //处理异常事件  //EPOLLRDHUP 事件，代表对端断开连接, EPOLLHUP：表示对应的文件描述符被挂断, EPOLLERR：表示对应的文件描述符发生错误  
             else if (events[i].events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR))
             {
                 //服务器端关闭连接，移除对应的定时器
                 util_timer *timer = users_timer[sockfd].timer;
                 deal_timer(timer, sockfd);
             }
-            //处理定时器信号
+            //处理信号
+            //管道读端对应文件描述符发生读事件
+            //因为统一了事件源，信号处理当成读事件来处理
+            //怎么统一？就是信号回调函数哪里不立即处理而是写到：pipe的写端
             else if ((sockfd == m_pipefd[0]) && (events[i].events & EPOLLIN))
             {
                 //接收到SIGALRM信号，timeout设置为True
