@@ -172,8 +172,8 @@ void WebServer::eventListen()
     Utils::u_epollfd = m_epollfd;
 }
 
-//创建一个定时器节点，将连接信息挂载
-//timer在什么时候调用？答案是在accept得到cfd的时候。这时候通过timer函数不只是初始化了cfd的时间，而且整体初始化。
+// 创建一个定时器节点，将连接信息挂载
+// timer在什么时候调用？答案是在accept得到cfd的时候。这时候通过timer函数不只是初始化了cfd的时间，而且整体初始化。
 // 也就是说，当前服务器已经认可了这一连接，完成了三次握手，并且得到了用户标识，允许传输数据。
 // 这里为了提升性能，给到了3倍阈值的超时。
 void WebServer::timer(int connfd, struct sockaddr_in client_address)
@@ -186,7 +186,7 @@ void WebServer::timer(int connfd, struct sockaddr_in client_address)
     users_timer[connfd].sockfd = connfd;
     util_timer *timer = new util_timer;
     timer->user_data = &users_timer[connfd];
-    timer->cb_func = cb_func;
+    timer->cb_func = cb_func;                   // 定时器回调函数:从内核事件表删除事件，关闭文件描述符，释放连接资源
     time_t cur = time(NULL);
     //TIMESLOT:最小时间间隔单位为5s
     timer->expire = cur + 3 * TIMESLOT;
@@ -323,7 +323,7 @@ void WebServer::dealwithread(int sockfd)
     {
         if (timer)
         {
-            //将定时器往后延迟3个单位
+            //收到数据，将定时器往后延迟3个单位
             adjust_timer(timer);
         }
 
@@ -357,7 +357,7 @@ void WebServer::dealwithread(int sockfd)
             m_pool->append_p(users + sockfd);
             if (timer)
             {
-                adjust_timer(timer);
+                adjust_timer(timer);        // 有写数据的请求，则将定时器结束时间往后推移3Timeout
             }
         }
         else
