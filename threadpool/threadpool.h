@@ -72,6 +72,7 @@ threadpool<T>::~threadpool()
 
 template <typename T>
 //reactor模式下的请求入队
+//state：read 0   write 1
 bool threadpool<T>::append(T *request, int state)
 {
     m_queuelocker.lock();
@@ -84,7 +85,7 @@ bool threadpool<T>::append(T *request, int state)
     request->m_state = state;
     m_workqueue.push_back(request);
     m_queuelocker.unlock();
-    m_queuestat.post();
+    m_queuestat.post();                 // sem信号量+1
     return true;
 }
 
