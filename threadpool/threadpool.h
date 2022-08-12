@@ -136,13 +136,13 @@ void threadpool<T>::run()
         m_queuelocker.unlock();
         if (!request)
             continue;
-        //Reactor
+        //Reactor，在工作线程中进行读写操作，因此，此处会进行真正的读写操作
         if (1 == m_actor_model)
         {
             //IO事件类型：0为读
             if (0 == request->m_state)
             {
-                if (request->read_once())
+                if (request->read_once())   // 读
                 {
                     request->improv = 1;
                     connectionRAII mysqlcon(&request->mysql, m_connPool);
@@ -156,7 +156,7 @@ void threadpool<T>::run()
             }
             else
             {
-                if (request->write())
+                if (request->write())       //写
                 {
                     request->improv = 1;
                 }

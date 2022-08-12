@@ -158,10 +158,11 @@ void WebServer::eventListen()
     //详情：https://blog.csdn.net/weixin_40039738/article/details/81095013
     ret = socketpair(PF_UNIX, SOCK_STREAM, 0, m_pipefd);
     assert(ret != -1);
-    utils.setnonblocking(m_pipefd[1]);
+    utils.setnonblocking(m_pipefd[1]);              //设置管道写端为非阻塞，为什么写端要非阻塞？
     utils.addfd(m_epollfd, m_pipefd[0], false, 0);
 
     utils.addsig(SIGPIPE, SIG_IGN);
+    //传递给主循环的信号值，这里只关注SIGALRM和SIGTERM
     utils.addsig(SIGALRM, utils.sig_handler, false);
     utils.addsig(SIGTERM, utils.sig_handler, false);
 
@@ -417,7 +418,7 @@ void WebServer::dealwithwrite(int sockfd)
 //事件回环（即服务器主线程）
 void WebServer::eventLoop()
 {
-    bool timeout = false;
+    bool timeout = false;       //超时标志
     bool stop_server = false;
 
     while (!stop_server)
@@ -434,7 +435,7 @@ void WebServer::eventLoop()
             LOG_ERROR("%s", "epoll failure");
             break;
         }
-        //对所有就绪事件进行处理
+        //轮询文件描述符,对所有就绪事件进行处理
         for (int i = 0; i < number; i++)
         {
             int sockfd = events[i].data.fd;
@@ -452,7 +453,7 @@ void WebServer::eventLoop()
                 util_timer *timer = users_timer[sockfd].timer;
                 deal_timer(timer, sockfd);
             }
-            //处理信号
+            //处理信号,管道读端对应文件描述符发生读事件
             //管道读端对应文件描述符发生读事件
             //因为统一了事件源，信号处理当成读事件来处理
             //怎么统一？就是信号回调函数哪里不立即处理而是写到：pipe的写端

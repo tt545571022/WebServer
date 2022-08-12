@@ -791,7 +791,7 @@ void http_conn::process()
     HTTP_CODE read_ret = process_read();
     if (read_ret == NO_REQUEST)
     {
-        //注册并监听读事件
+        //将事件重置为EPOLLONESHOT
         modfd(m_epollfd, m_sockfd, EPOLLIN, m_TRIGMode);
         return;
     }
@@ -801,6 +801,6 @@ void http_conn::process()
     {
         close_conn();
     }
-    //注册并监听写事件
+    //将事件重置为EPOLLONESHOT
     modfd(m_epollfd, m_sockfd, EPOLLOUT, m_TRIGMode);
 }
