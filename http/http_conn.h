@@ -50,30 +50,30 @@ public:
         PATH
     };
 	//主状态机状态，检查请求报文中元素
-    enum CHECK_STATE
+    enum CHECK_STATE    //enum会自动依次+1
     {
-        CHECK_STATE_REQUESTLINE = 0,
-        CHECK_STATE_HEADER,
-        CHECK_STATE_CONTENT
+        CHECK_STATE_REQUESTLINE = 0,    //解析请求行
+        CHECK_STATE_HEADER,             //解析请求头    
+        CHECK_STATE_CONTENT             //解析消息体，仅用于解析POST请求
     };
 	//HTTP状态码
     enum HTTP_CODE
     {
-        NO_REQUEST,
-        GET_REQUEST,
-        BAD_REQUEST,
-        NO_RESOURCE,
-        FORBIDDEN_REQUEST,
-        FILE_REQUEST,
-        INTERNAL_ERROR,
-        CLOSED_CONNECTION
+        NO_REQUEST,         //请求不完整，需要继续读取请求报文数据    
+        GET_REQUEST,        //获得了完整的HTTP请求
+        BAD_REQUEST,        //HTTP请求报文有语法错误
+        NO_RESOURCE,        //
+        FORBIDDEN_REQUEST,  //    
+        FILE_REQUEST,       //
+        INTERNAL_ERROR,     //服务器内部错误，该结果在主状态机逻辑switch的default下，一般不会触发
+        CLOSED_CONNECTION   //    
     };
 	//从状态机的状态，文本解析是否成功
     enum LINE_STATUS
     {
-        LINE_OK = 0,
-        LINE_BAD,
-        LINE_OPEN
+        LINE_OK = 0,        //完整读取一行
+        LINE_BAD,           //报文语法有误
+        LINE_OPEN           //读取的行不完整
     };
 
 public:

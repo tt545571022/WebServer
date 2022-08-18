@@ -383,44 +383,60 @@ http_conn::HTTP_CODE http_conn::parse_content(char *text)
     return NO_REQUEST;
 }
 
-//有限状态机处理请求报文
+//有限状态机处理请求报文, 完成报文的解析
 http_conn::HTTP_CODE http_conn::process_read()
 {
+    //初始化从状态机状态、HTTP请求解析结果
     LINE_STATUS line_status = LINE_OK;
     HTTP_CODE ret = NO_REQUEST;
     char *text = 0;
 
-    while ((m_check_state == CHECK_STATE_CONTENT && line_status == LINE_OK) || ((line_status = parse_line()) == LINE_OK))
+    //从状态机更专注于对于字符的过滤和判断，主状态机专注于对于整个文本块的判断与过滤
+    //通过while循环 封装主状态机 对每一行进行循环处理
+    //此时 从状态机已经修改完毕 主状态机可以取出完整的行进行解析
+    // m_check_state :主状态机的状态, 初始状态为：CHECK_STATE_REQUESTLINE
+    //从状态机驱动主状态机
+    //parse_line()为从状态机的具体实现
+
+    //在GET请求报文中，每一行都是\r\n作为结束，所以对报文进行拆解时，仅用从状态机的状态line_status=parse_line())==LINE_OK语句即可.
+    //但，在POST请求报文中，消息体的末尾没有任何字符，所以不能使用从状态机的状态，这里转而使用主状态机的状态作为循环入口条件。
+    while ((m_check_state == CHECK_STATE_CONTENT && line_status == LINE_OK) || ((line_status = parse_line()) == LINE_OK))   
     {
+        //m_start_line是每一个数据行在m_read_buf中的起始位置
+        //m_checked_idx表示从状态机在m_read_buf中读取的位置
         text = get_line();
-        m_start_line = m_checked_idx;
+        m_start_line = m_checked_idx;       //m_checked_idx: m_read_buf读取的位置
         LOG_INFO("%s", text);
+        //主状态机的三种状态转移逻辑
         switch (m_check_state)
         {
-        case CHECK_STATE_REQUESTLINE:
+        case CHECK_STATE_REQUESTLINE:       //解析请求行
         {
-            ret = parse_request_line(text);
+            ret = parse_request_line(text); //解析完成后主状态机的状态变为CHECK_STATE_HEADER
             if (ret == BAD_REQUEST)
                 return BAD_REQUEST;
             break;
         }
-        case CHECK_STATE_HEADER:
+        case CHECK_STATE_HEADER:            //解析请求头
         {
             ret = parse_headers(text);
-            if (ret == BAD_REQUEST)
+            if (ret == BAD_REQUEST)         
                 return BAD_REQUEST;
-            else if (ret == GET_REQUEST)
+            else if (ret == GET_REQUEST)    //完整解析GET请求后，跳转到报文响应函数     GET_REQUEST:获得了完整的HTTP请求
             {
                 return do_request();
             }
             break;
         }
-        case CHECK_STATE_CONTENT:
+        case CHECK_STATE_CONTENT:           //解析消息体，仅用于解析POST请求,GET和POST请求报文的区别之一是有无消息体部分，GET请求没有消息体，当解析完空行之后，便完成了报文的解析。
         {
             ret = parse_content(text);
             if (ret == GET_REQUEST)
                 return do_request();
-            line_status = LINE_OPEN;
+            line_status = LINE_OPEN;        //解析完消息体即完成报文解析，避免再次进入循环，更新line_status  //LINE_OPEN:读取的行不完整
+                                            //解析完消息体后，报文的完整解析就完成了，但此时主状态机的状态还是CHECK_STATE_CONTENT，
+                                            //也就是说，符合循环入口条件，还会再次进入循环，这并不是我们所希望的。
+                                            //为此，增加了该语句，并在完成消息体解析后，将line_status变量更改为LINE_OPEN，此时可以跳出循环，完成报文解析任务。
             break;
         }
         default:

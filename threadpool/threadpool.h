@@ -73,10 +73,10 @@ threadpool<T>::~threadpool()
 template <typename T>
 //reactor模式下的请求入队
 //state：read 0   write 1
-bool threadpool<T>::append(T *request, int state)
+bool threadpool<T>::append(T *request, int state)   // 压入的是users+sockfd, users = new http_conn[nums], 即压入的是一个http请求
 {
     m_queuelocker.lock();
-    if (m_workqueue.size() >= m_max_requests)
+    if (m_workqueue.size() >= m_max_requests)   
     {
         m_queuelocker.unlock();
         return false;
@@ -123,15 +123,15 @@ void threadpool<T>::run()
 {
     while (true)
     {
-        m_queuestat.wait();
-        m_queuelocker.lock();
+        m_queuestat.wait();             //sem信号量 sem-1
+        m_queuelocker.lock();           //请求队列上锁
         if (m_workqueue.empty())
         {
             m_queuelocker.unlock();
             continue;
         }
         //
-        T *request = m_workqueue.front();
+        T *request = m_workqueue.front();   //queue中装的是http请求
         m_workqueue.pop_front();
         m_queuelocker.unlock();
         if (!request)
@@ -146,7 +146,7 @@ void threadpool<T>::run()
                 {
                     request->improv = 1;
                     connectionRAII mysqlcon(&request->mysql, m_connPool);
-                    request->process();
+                    request->process();     //处理http报文请求与报文响应。根据read/write的buffer进行报文的解析和响应
                 }
                 else
                 {
@@ -172,7 +172,7 @@ void threadpool<T>::run()
         else
         {
             connectionRAII mysqlcon(&request->mysql, m_connPool);
-            request->process();
+            request->process();     //处理http报文请求与报文响应。根据read/write的buffer进行报文的解析和响应
         }
     }
 }
