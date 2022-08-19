@@ -9,7 +9,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <assert.h>
-#include <sys/stat.h>
+#include <sys/stat.h>           //stat函数用于取得指定文件的文件属性，并将文件属性存储在结构体stat里
 #include <string.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -59,12 +59,12 @@ public:
 	//HTTP状态码
     enum HTTP_CODE
     {
-        NO_REQUEST,         //请求不完整，需要继续读取请求报文数据    
-        GET_REQUEST,        //获得了完整的HTTP请求
-        BAD_REQUEST,        //HTTP请求报文有语法错误
-        NO_RESOURCE,        //
-        FORBIDDEN_REQUEST,  //    
-        FILE_REQUEST,       //
+        NO_REQUEST,         //请求不完整，需要继续读取请求报文数据,跳转主线程继续监测读事件
+        GET_REQUEST,        //获得了完整的HTTP请求,调用do_request完成请求资源映射
+        BAD_REQUEST,        //HTTP请求报文有语法错误或请求资源为目录,跳转process_write完成响应报文
+        NO_RESOURCE,        //请求资源不存在,跳转process_write完成响应报文
+        FORBIDDEN_REQUEST,  //请求资源禁止访问，没有读取权限,跳转process_write完成响应报文
+        FILE_REQUEST,       //请求资源可以正常访问,跳转process_write完成响应报文
         INTERNAL_ERROR,     //服务器内部错误，该结果在主状态机逻辑switch的default下，一般不会触发
         CLOSED_CONNECTION   //    
     };
@@ -168,8 +168,8 @@ private:
     bool m_linger;
 	//读取服务器上的文件地址
     char *m_file_address;
-    struct stat m_file_stat;
-	//io向量机制iovec
+    struct stat m_file_stat;    
+	//io向量机制iovec，通常，这个结构用作一个多元素的数组。iov_base：指向数据的地址，iov_len：表示数据的长度
     struct iovec m_iv[2];
     int m_iv_count;
     int cgi;        //是否启用的POST

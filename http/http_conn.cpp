@@ -565,7 +565,7 @@ http_conn::HTTP_CODE http_conn::do_request()
         //如果以上均不符合，即不是登录和注册，直接将url与网站目录拼接
         //这里的情况是welcome界面，请求服务器上的一个图片
         strncpy(m_real_file + len, m_url, FILENAME_LEN - len - 1);
-    //通过stat获取请求资源文件信息，成功则将信息更新到m_file_stat结构体
+    //通过stat获取请求资源文件信息，成功则将信息更新到m_file_stat结构体,st_mode:文件类型和权限;  st_size:文件大小，字节数.
     //失败返回NO_RESOURCE状态，表示资源不存在
     if (stat(m_real_file, &m_file_stat) < 0)
         return NO_RESOURCE;
@@ -578,9 +578,16 @@ http_conn::HTTP_CODE http_conn::do_request()
     if (S_ISDIR(m_file_stat.st_mode))
         return BAD_REQUEST;
 
-    //以只读方式获取文件描述符，通过mmap将该文件映射到内存中
+    //以只读方式获取文件描述符，通过mmap将该文件映射到内存中,mmap用于提高文件的访问速度
     int fd = open(m_real_file, O_RDONLY);
-    m_file_address = (char *)mmap(0, m_file_stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    //mmap原型：void* mmap(void* start,size_t length,int prot,int flags,int fd,off_t offset);
+    //start：映射区的开始地址，设置为0时表示由系统决定映射区的起始地址
+    //length：映射区的长度
+    //prot：期望的内存保护标志，不能与文件的打开模式冲突,PROT_READ 表示页内容可以被读取
+    //flags：指定映射对象的类型，映射选项和映射页是否可以共享，MAP_PRIVATE 建立一个写入时拷贝的私有映射，内存区域的写入不会影响到原文件
+    //fd：有效的文件描述符，一般是由open()函数返回
+    //off_toffset：被映射对象内容的起点
+    m_file_address = (char *)mmap(0, m_file_stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0);   
     //避免文件描述符的浪费和占用
     close(fd);
 
@@ -613,7 +620,13 @@ bool http_conn::write()
     while (1)
     {
         //将响应报文的状态行、消息头、空行和响应正文发送给浏览器端
-        temp = writev(m_sockfd, m_iv, m_iv_count);
+        //writev函数用于在一次函数调用中写多个非连续缓冲区，有时也将这该函数称为聚集写。
+        //原型：ssize_t writev(int filedes, const struct iovec *iov, int iovcnt);
+        //filedes表示文件描述符
+        //iov为前述io向量机制结构体iovec
+        //iovcnt为结构体的个数
+        //若成功则返回已写的字节数，若出错则返回-1。writev以顺序iov[0]，iov[1]至iov[iovcnt-1]从缓冲区中聚集输出数据。writev返回输出的字节总数，通常，它应等于所有缓冲区长度之和。
+        temp = writev(m_sockfd, m_iv, m_iv_count);      
         //error
         if (temp < 0)
         {
