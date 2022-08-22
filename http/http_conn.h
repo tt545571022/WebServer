@@ -170,11 +170,12 @@ private:
     char *m_file_address;
     struct stat m_file_stat;    
 	//io向量机制iovec，通常，这个结构用作一个多元素的数组。iov_base：指向数据的地址，iov_len：表示数据的长度
-    struct iovec m_iv[2];
+    //m_iv[0]指向m_write_buf，m_iv[1]指向mmap的地址m_file_address.
+    m_iv[2];
     int m_iv_count;
     int cgi;        //是否启用的POST
     char *m_string; //存储请求头数据
-	 //剩余发送字节数
+	//剩余发送字节数
     int bytes_to_send;
 	//已发送字节数
     int bytes_have_send;

@@ -15,7 +15,7 @@ const char *error_500_title = "Internal Error";
 const char *error_500_form = "There was an unusual problem serving the request file.\n";
 
 locker m_lock;
-map<string, string> users;
+map<string, string> users;      //存放当前连的连接用户名和密码
 
 int http_conn::m_user_count = 0;
 int http_conn::m_epollfd = -1;
@@ -449,12 +449,14 @@ http_conn::HTTP_CODE http_conn::process_read()
 //功能逻辑单元
 http_conn::HTTP_CODE http_conn::do_request()
 {
+    //将初始化的m_real_file赋值为网站根目录
     strcpy(m_real_file, doc_root);
     int len = strlen(doc_root);
     //printf("m_url:%s\n", m_url);
+    //找到m_url中/的位置
     const char *p = strrchr(m_url, '/');
 
-    //处理cgi
+    //处理cgi,实现'2'登录'3'注册校验
     if (cgi == 1 && (*(p + 1) == '2' || *(p + 1) == '3'))
     {
 
@@ -463,7 +465,7 @@ http_conn::HTTP_CODE http_conn::do_request()
 
         char *m_url_real = (char *)malloc(sizeof(char) * 200);
         strcpy(m_url_real, "/");
-        strcat(m_url_real, m_url + 2);
+        strcat(m_url_real, m_url + 2);  //把 src 所指向的字符串追加到 dest 所指向的字符串的结尾。
         strncpy(m_real_file + len, m_url_real, FILENAME_LEN - len - 1);
         free(m_url_real);
 
@@ -480,10 +482,12 @@ http_conn::HTTP_CODE http_conn::do_request()
             password[j] = m_string[i];
         password[j] = '\0';
 
+        //注册
         if (*(p + 1) == '3')
         {
             //如果是注册，先检测数据库中是否有重名的
             //没有重名的，进行增加数据
+            //INSERT INTO user(username, passwd) VALUES('$name','$password')
             char *sql_insert = (char *)malloc(sizeof(char) * 200);
             strcpy(sql_insert, "INSERT INTO user(username, passwd) VALUES(");
             strcat(sql_insert, "'");
@@ -492,7 +496,7 @@ http_conn::HTTP_CODE http_conn::do_request()
             strcat(sql_insert, password);
             strcat(sql_insert, "')");
 
-            if (users.find(name) == users.end())
+            if (users.find(name) == users.end())    //先判断当前连接中是否有同名的，再判断数据库中是否有重名的。map<string, string> users
             {
                 m_lock.lock();
                 int res = mysql_query(mysql, sql_insert);
@@ -600,7 +604,7 @@ void http_conn::unmap()
 {
     if (m_file_address)
     {
-        munmap(m_file_address, m_file_stat.st_size);
+        munmap(m_file_address, m_file_stat.st_size);    //munmap 函数的作用是释放内存段
         m_file_address = 0;
     }
 }
@@ -630,13 +634,13 @@ bool http_conn::write()
         //error
         if (temp < 0)
         {
-            //判断缓冲区是否满了
-            if (errno == EAGAIN)
+            //判断缓冲区是否满了,可以传送大文件
+            if (errno == EAGAIN)    //满了
             {
                 modfd(m_epollfd, m_sockfd, EPOLLOUT, m_TRIGMode);
                 return true;
             }
-            unmap();
+            unmap();        //取消内存映射
             return false;
         }
         //更新已发送字节
@@ -649,7 +653,7 @@ bool http_conn::write()
             //不再继续发送头部信息
             m_iv[0].iov_len = 0;
             m_iv[1].iov_base = m_file_address + (bytes_have_send - m_write_idx);
-            m_iv[1].iov_len = bytes_to_send;
+            m_iv[1].iov_len = bytes_to_send;    //总长度
         }
         //继续发送第一个iovec头部信息的数据
         else
@@ -666,7 +670,9 @@ bool http_conn::write()
             //重新注册写事件
             modfd(m_epollfd, m_sockfd, EPOLLIN, m_TRIGMode);
 
-            //浏览器的请求为长连接
+            //判断浏览器的请求是否为长连接
+            //长连接重置http类实例，注册读事件，不关闭连接，
+            //短连接直接关闭连接
             if (m_linger)
             {
                 //重新初始化HTTP对象**
@@ -682,6 +688,7 @@ bool http_conn::write()
 }
 
 //添加响应报文的公共函数
+//更新m_write_idx指针和缓冲区m_write_buf中的内容。
 bool http_conn::add_response(const char *format, ...)
 {
     //如果写入内容超出m_write_buf大小则报错
@@ -718,6 +725,9 @@ bool http_conn::add_status_line(int status, const char *title)
 //添加消息报头，具体的添加文本长度、连接状态和空行
 bool http_conn::add_headers(int content_len)
 {
+    //添加Content-Length，表示响应报文的长度,用于浏览器端判断服务器是否发送完数据
+    //add_linger添加连接状态，通知浏览器端是保持连接还是关闭 "keep-alive" : "close"
+    //add_blank_line添加空行
     return add_content_length(content_len) && add_linger() &&
            add_blank_line();
 }
@@ -753,59 +763,64 @@ bool http_conn::add_content(const char *content)
 }
 
 //生成响应报文
+//根据do_request的返回状态，服务器子线程调用process_write向m_write_buf中写入响应报文
 bool http_conn::process_write(HTTP_CODE ret)
 {
     switch (ret)
     {
-    case INTERNAL_ERROR:
-    {
-        add_status_line(500, error_500_title);
-        add_headers(strlen(error_500_form));
-        if (!add_content(error_500_form))
-            return false;
-        break;
-    }
-    case BAD_REQUEST:
-    {
-        add_status_line(404, error_404_title);
-        add_headers(strlen(error_404_form));
-        if (!add_content(error_404_form))
-            return false;
-        break;
-    }
-    case FORBIDDEN_REQUEST:
-    {
-        add_status_line(403, error_403_title);
-        add_headers(strlen(error_403_form));
-        if (!add_content(error_403_form))
-            return false;
-        break;
-    }
-    case FILE_REQUEST:
-    {
-        add_status_line(200, ok_200_title);
-        if (m_file_stat.st_size != 0)
+        case INTERNAL_ERROR:                            //服务器内部错误，该结果在主状态机逻辑switch的default下，一般不会触发
         {
-            add_headers(m_file_stat.st_size);
-            m_iv[0].iov_base = m_write_buf;
-            m_iv[0].iov_len = m_write_idx;
-            m_iv[1].iov_base = m_file_address;
-            m_iv[1].iov_len = m_file_stat.st_size;
-            m_iv_count = 2;
-            bytes_to_send = m_write_idx + m_file_stat.st_size;
-            return true;
-        }
-        else
-        {
-            const char *ok_string = "<html><body></body></html>";
-            add_headers(strlen(ok_string));
-            if (!add_content(ok_string))
+            add_status_line(500, error_500_title);      //添加状态行：http/1.1 状态码 状态消息
+            add_headers(strlen(error_500_form));        //添加消息报头，内部调用add_content_length和add_linger函数
+            if (!add_content(error_500_form))
                 return false;
+            break;
         }
+        case BAD_REQUEST:
+        {
+            add_status_line(404, error_404_title);
+            add_headers(strlen(error_404_form));
+            if (!add_content(error_404_form))
+                return false;
+            break;
+        }
+        case FORBIDDEN_REQUEST:
+        {
+            add_status_line(403, error_403_title);
+            add_headers(strlen(error_403_form));
+            if (!add_content(error_403_form))
+                return false;
+            break;
+        }
+        case FILE_REQUEST:                              //请求资源可以正常访问,跳转process_write完成响应报文
+        {
+            add_status_line(200, ok_200_title);
+            if (m_file_stat.st_size != 0)
+            {
+                add_headers(m_file_stat.st_size);
+                //第一个iovec指针指向响应报文缓冲区，长度指向m_write_idx
+                m_iv[0].iov_base = m_write_buf;
+                m_iv[0].iov_len = m_write_idx;
+                //第二个iovec指针指向mmap返回的文件指针，长度指向文件大小
+                m_iv[1].iov_base = m_file_address;
+                m_iv[1].iov_len = m_file_stat.st_size;
+                m_iv_count = 2;
+                //发送的全部数据为响应报文头部信息和文件大小
+                bytes_to_send = m_write_idx + m_file_stat.st_size;
+                return true;
+            }
+            else    //如果请求的资源大小为0，则返回空白html文件
+            {
+                const char *ok_string = "<html><body></body></html>";
+                add_headers(strlen(ok_string));
+                if (!add_content(ok_string))
+                    return false;
+            }
+        }
+        default:
+            return false;
     }
-    default:
-        return false;
-    }
+    //除FILE_REQUEST状态外，其余状态只申请一个iovec，指向响应报文缓冲区
     m_iv[0].iov_base = m_write_buf;
     m_iv[0].iov_len = m_write_idx;
     m_iv_count = 1;
@@ -817,7 +832,7 @@ bool http_conn::process_write(HTTP_CODE ret)
 void http_conn::process()
 {
     //NO_REQUEST，表示请求不完整，需要继续接收请求数据
-    HTTP_CODE read_ret = process_read();
+    HTTP_CODE read_ret = process_read();    // do_request()
     if (read_ret == NO_REQUEST)
     {
         //将事件重置为EPOLLONESHOT
