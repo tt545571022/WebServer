@@ -185,7 +185,7 @@ void WebServer::timer(int connfd, struct sockaddr_in client_address)
     //创建定时器，设置回调函数和超时时间，绑定用户数据，将定时器添加到链表中
     users_timer[connfd].address = client_address;
     users_timer[connfd].sockfd = connfd;
-    util_timer *timer = new util_timer;
+    util_timer *timer = new util_timer;         // util_timer 定时器类，多个util_timer组成一个双向链表
     timer->user_data = &users_timer[connfd];
     timer->cb_func = cb_func;                   // 定时器回调函数:从内核事件表删除事件，关闭文件描述符，释放连接资源
     time_t cur = time(NULL);
